@@ -1,0 +1,5 @@
+# Everything in this folder is a credential — ignore it all.
+# The two exceptions keep the folder itself in git so it exists on a fresh clone.
+*
+!.gitignore
+!README.md
