@@ -23,34 +23,22 @@ import {
  * Report reads, scoped by getVisibleClass() — the same rule the class list and
  * detail page use. Nothing here trusts the classId in the URL.
  *
- * ── On date filtering and Firestore indexes ───────────────────────────────
- *
- * A Firestore query may combine any number of equality filters without a
- * composite index (they are served by merge join), but adding a *range*
- * filter needs one. ilmTrack's firestore.indexes.json has no index that fits
- * `classId == X` plus a range, so by default we fetch the class's records
- * with an equality-only query and narrow the range in memory — which is what
- * the mobile app's own report screen does.
- *
- * That is correct but chatty: the one-month default then saves transfer and
- * rendering, not Firestore reads. Setting REPORTS_DATE_INDEXES=true switches
- * to server-side range filtering, which needs these two indexes created first
- * (Firebase Console → Firestore → Indexes; this is project configuration, so
- * it does not mean editing anything in ../ilmTrack):
+ * Both range queries need a composite index: a Firestore query may combine any
+ * number of equality filters without one, but a *range* filter always needs it.
+ * Creating the two is a setup step, listed in the README:
  *
  *   attendance:  classId ASC, date ASC
  *   homework:    classId ASC, createdAt ASC
  *
- * Results are identical either way; only the read volume differs.
+ * They serve only this console. The mobile app can never issue these queries —
+ * its security rules require every list query to carry an identity filter
+ * statically, so its equivalents are `classId + invitedTeacherIds + date` and
+ * have their own indexes in ilmTrack's firestore.indexes.json.
  *
  * Note the asymmetry in which field each collection is filtered on —
  * attendance by `date`, homework by `createdAt`. That is inherited from the
  * mobile app, and kept so both surfaces report the same totals.
  */
-
-function dateIndexesEnabled(): boolean {
-  return process.env.REPORTS_DATE_INDEXES === 'true';
-}
 
 export type ReportKind = 'attendance' | 'homework' | 'summary';
 
@@ -72,41 +60,25 @@ async function fetchStudents(classId: string): Promise<Student[]> {
 }
 
 async function fetchAttendance(classId: string, range: ReportRange): Promise<Attendance[]> {
-  let query = getAdminDb().collection('attendance').where('classId', '==', classId);
+  const snap = await getAdminDb()
+    .collection('attendance')
+    .where('classId', '==', classId)
+    .where('date', '>=', Timestamp.fromDate(range.start))
+    .where('date', '<=', Timestamp.fromDate(range.end))
+    .get();
 
-  if (dateIndexesEnabled()) {
-    query = query
-      .where('date', '>=', Timestamp.fromDate(range.start))
-      .where('date', '<=', Timestamp.fromDate(range.end));
-  }
-
-  const snap = await query.get();
-  const records = snap.docs.map((d) => ({ ...(d.data() as Attendance), id: d.id }));
-
-  if (dateIndexesEnabled()) return records;
-  return records.filter((a) => withinRange(a.date, range));
+  return snap.docs.map((d) => ({ ...(d.data() as Attendance), id: d.id }));
 }
 
 async function fetchHomework(classId: string, range: ReportRange): Promise<Homework[]> {
-  let query = getAdminDb().collection('homework').where('classId', '==', classId);
+  const snap = await getAdminDb()
+    .collection('homework')
+    .where('classId', '==', classId)
+    .where('createdAt', '>=', Timestamp.fromDate(range.start))
+    .where('createdAt', '<=', Timestamp.fromDate(range.end))
+    .get();
 
-  if (dateIndexesEnabled()) {
-    query = query
-      .where('createdAt', '>=', Timestamp.fromDate(range.start))
-      .where('createdAt', '<=', Timestamp.fromDate(range.end));
-  }
-
-  const snap = await query.get();
-  const records = snap.docs.map((d) => ({ ...(d.data() as Homework), id: d.id }));
-
-  if (dateIndexesEnabled()) return records;
-  return records.filter((h) => withinRange(h.createdAt, range));
-}
-
-function withinRange(stamp: Timestamp | undefined, range: ReportRange): boolean {
-  if (!stamp) return false;
-  const ms = stamp.toDate().getTime();
-  return ms >= range.start.getTime() && ms <= range.end.getTime();
+  return snap.docs.map((d) => ({ ...(d.data() as Homework), id: d.id }));
 }
 
 export interface ClassReport {

@@ -19,9 +19,6 @@ const EMULATOR = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
 process.env.FIRESTORE_EMULATOR_HOST = EMULATOR;
 process.env.FIREBASE_USE_EMULATOR = 'true';
 process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID = PROJECT_ID;
-// Exercise the in-memory date filtering, which is the default in production
-// until the composite indexes named in src/lib/data/reports.ts exist.
-delete process.env.REPORTS_DATE_INDEXES;
 
 type Mod = {
   classes: typeof import('@/lib/data/classes');
@@ -242,15 +239,4 @@ describe('loadClassReport', () => {
     expect(report!.totalsRow!.totalAbsent).toBe(1);
   });
 
-  it('reports the same rows whether the range is filtered by index or in memory', async () => {
-    const inMemory = await mod.reports.loadClassReport(OWNER, OURS, 'attendance', WINDOW());
-
-    process.env.REPORTS_DATE_INDEXES = 'true';
-    try {
-      const byIndex = await mod.reports.loadClassReport(OWNER, OURS, 'attendance', WINDOW());
-      expect(byIndex!.rows).toEqual(inMemory!.rows);
-    } finally {
-      delete process.env.REPORTS_DATE_INDEXES;
-    }
-  });
 });

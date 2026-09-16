@@ -46,10 +46,12 @@ Read `README.md` first; read `../ilmTrack/CLAUDE.md` for the Firestore data mode
   parameter and copies the rest (`src/lib/reports/query.ts`). That is what
   keeps the class picker from disturbing the date range and vice versa; do
   not move either into component state.
-- **Report date ranges are filtered in memory** unless
-  `REPORTS_DATE_INDEXES=true` and the two composite indexes named in
-  `src/lib/data/reports.ts` exist. Adding a range filter to a Firestore query
-  needs a composite index; equality filters alone do not.
+- **Report date ranges are filtered by Firestore**, which needs the two
+  composite indexes named in `src/lib/data/reports.ts` and in the README's
+  setup steps. Adding a range filter to a query needs a composite index;
+  equality filters alone do not. Those indexes serve only this console — the
+  app's rules force an identity filter into every list query, so it can never
+  issue these.
 - **Tests need the Firestore emulator**: `cd ../ilmTrack && firebase
   emulators:start --only firestore`, then `npm test`. They never touch production.
 - **Scripts run through `tsx` as CommonJS** (no `"type": "module"`), so no

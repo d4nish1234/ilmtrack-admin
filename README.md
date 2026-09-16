@@ -57,7 +57,36 @@ Read-only apart from the co-teacher link. Built to run locally.
    This reads `ADMIN_EMAILS` and sets a `{ role: 'super-admin' }` custom claim
    on each account. Re-run it whenever you change that list.
 
-5. **Run**
+5. **Create the report indexes.** Two composite indexes, needed once per
+   Firebase project. Reports return `FAILED_PRECONDITION` until they exist.
+
+   ```bash
+   gcloud firestore indexes composite create \
+     --project="$NEXT_PUBLIC_FIREBASE_PROJECT_ID" \
+     --collection-group=attendance \
+     --field-config=field-path=classId,order=ascending \
+     --field-config=field-path=date,order=ascending
+
+   gcloud firestore indexes composite create \
+     --project="$NEXT_PUBLIC_FIREBASE_PROJECT_ID" \
+     --collection-group=homework \
+     --field-config=field-path=classId,order=ascending \
+     --field-config=field-path=createdAt,order=ascending
+   ```
+
+   Building is online — the mobile app keeps working throughout. Wait for
+   `state: READY`:
+
+   ```bash
+   gcloud firestore indexes composite list --project="$NEXT_PUBLIC_FIREBASE_PROJECT_ID"
+   ```
+
+   Use `gcloud`, not `firebase deploy --only firestore:indexes`: that command
+   is declarative against `../ilmTrack/firestore.indexes.json`, and will offer
+   to delete any index missing from it. Not needed for the emulator, which
+   does not enforce composite indexes.
+
+6. **Run**
 
    ```bash
    npm run dev     # http://localhost:3000
@@ -136,24 +165,27 @@ The range defaults to the **last month**, and is capped at `MAX_RANGE_DAYS`.
 
 ### Report indexes
 
-A Firestore query may combine any number of equality filters without a
-composite index, but adding a *range* filter needs one, and ilmTrack's
-`firestore.indexes.json` has nothing that fits `classId ==` plus a date range.
-So by default the range is narrowed **in memory**, which is what the mobile
-app's own report screen does. Correct, but it reads the class's whole history
-each time — the one-month default then saves transfer and rendering, not
-Firestore reads.
-
-Create these two indexes (Firebase Console → Firestore → Indexes; that is
-project configuration, so nothing in `../ilmTrack` changes):
+Both report queries filter a date range, and a Firestore query may combine any
+number of equality filters without a composite index but a *range* filter
+always needs one. Hence the two created in
+[setup](#setup):
 
 ```
 attendance:  classId ASC, date ASC
 homework:    classId ASC, createdAt ASC
 ```
 
-then set `REPORTS_DATE_INDEXES=true`. Results are identical either way; only
-the read volume differs, and there is a test asserting the two paths agree.
+They exist only for this console, and the mobile app will never use them: its
+security rules require every list query to carry an identity filter
+statically, so its equivalents are `classId + invitedTeacherIds + date`, which
+already have indexes in `../ilmTrack/firestore.indexes.json`. Nothing in the
+app needs to change for reports to work here.
+
+They live outside that file, which is a deliberate trade — this console's
+indexes are not the app repo's business. Note that file is already not a full
+picture of the project: several indexes the app itself relies on (including
+`homework: studentId, teacherId, createdAt`) exist only in the project, so a
+`firebase deploy --only firestore:indexes` would offer to delete those too.
 
 ## What linking a teacher does
 
