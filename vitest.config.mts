@@ -3,7 +3,13 @@ import { resolve } from 'node:path';
 
 export default defineConfig({
   resolve: {
-    alias: { '@': resolve(import.meta.dirname, './src') },
+    alias: {
+      '@': resolve(import.meta.dirname, './src'),
+      // The data layer marks itself 'server-only', which throws when imported
+      // outside a React Server Component. Under Node that guard has nothing to
+      // protect, so stub it and let the tests import those modules directly.
+      'server-only': resolve(import.meta.dirname, './tests/stubs/server-only.ts'),
+    },
   },
   test: {
     environment: 'node',

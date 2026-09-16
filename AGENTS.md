@@ -24,11 +24,32 @@ Read `README.md` first; read `../ilmTrack/CLAUDE.md` for the Firestore data mode
   and every route handler calls `requireApiPermission()`
   (`src/lib/auth/session.ts`). Permissions live in one table in
   `src/lib/auth/roles.ts`. Do not add a page or endpoint without a guard.
+  The `(admin)` shell layout is the sole exception — it calls
+  `requireSession()`, because any role may render a header.
+- **Two kinds of user**, both resolved by `resolveRole()` in
+  `src/lib/auth/session.ts`: super-admins (`ADMIN_EMAILS` + a granted custom
+  claim) and teachers (verified email + `users/{uid}.role == 'teacher'`).
+  Sign-in and every later request go through that one function; keep it that
+  way so a cookie can never be minted for an account `getSession()` would
+  then reject.
 - **Class visibility** is decided in one place: `canSeeClass()` in
-  `src/lib/data/classes.ts`. Scope new roles there, not in pages.
+  `src/lib/data/classes.ts`, reached by `getVisibleClass()` and
+  `visibleClassDocs()`. Scope new roles there, not in pages. It reads the
+  class document, never `users/{uid}.adminClassIds` — that array is a lookup
+  hint and is known to drift.
 - **Types in `src/types/` are hand-copied** from `../ilmTrack/src/types/`
   because the two apps use different Firebase SDKs (different `Timestamp`
-  classes). Keep them in sync by hand.
+  classes). Keep them in sync by hand. `src/lib/reports/rows.ts` is a
+  hand-port of `../ilmTrack/src/utils/reportUtils.ts` for the same reason —
+  keep the arithmetic identical so both surfaces report the same totals.
+- **Report state lives in the URL**, and each control writes exactly one
+  parameter and copies the rest (`src/lib/reports/query.ts`). That is what
+  keeps the class picker from disturbing the date range and vice versa; do
+  not move either into component state.
+- **Report date ranges are filtered in memory** unless
+  `REPORTS_DATE_INDEXES=true` and the two composite indexes named in
+  `src/lib/data/reports.ts` exist. Adding a range filter to a Firestore query
+  needs a composite index; equality filters alone do not.
 - **Tests need the Firestore emulator**: `cd ../ilmTrack && firebase
   emulators:start --only firestore`, then `npm test`. They never touch production.
 - **Scripts run through `tsx` as CommonJS** (no `"type": "module"`), so no

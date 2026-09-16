@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getAdminAuth } from '@/lib/firebase-admin';
-import { isRole } from '@/lib/auth/roles';
+import { landingPath } from '@/lib/auth/roles';
 import {
   SESSION_COOKIE,
   SESSION_MAX_AGE_MS,
-  isAllowlistedEmail,
+  resolveRole,
 } from '@/lib/auth/session';
 
 /** Exchange a Firebase ID token for a session cookie. */
@@ -28,23 +28,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid or expired sign-in.' }, { status: 401 });
   }
 
-  // Gate 1: the env allowlist.
-  if (!isAllowlistedEmail(claims.email)) {
-    return NextResponse.json(
-      { error: 'This account is not an ilmTrack admin.' },
-      { status: 403 }
-    );
-  }
-
-  // Gate 2: a known role claim.
-  if (!isRole(claims.role)) {
-    return NextResponse.json(
-      {
-        error:
-          'This account has no admin role yet. Run `npm run grant`, then sign out and back in.',
-      },
-      { status: 403 }
-    );
+  // The same resolution every later request performs, so a cookie can never be
+  // minted for an account that getSession() would then turn away.
+  const resolved = await resolveRole(claims);
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.message }, { status: 403 });
   }
 
   const sessionCookie = await getAdminAuth().createSessionCookie(idToken, {
@@ -59,7 +47,9 @@ export async function POST(request: Request) {
     maxAge: SESSION_MAX_AGE_MS / 1000,
   });
 
-  return NextResponse.json({ ok: true });
+  // The client cannot read the role (the cookie is httpOnly), so tell it where
+  // this account belongs rather than making it guess.
+  return NextResponse.json({ ok: true, redirectTo: landingPath(resolved.role) });
 }
 
 /** Sign out. */

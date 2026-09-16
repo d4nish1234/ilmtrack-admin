@@ -1,4 +1,5 @@
 import { getSession } from '@/lib/auth/session';
+import { landingPath } from '@/lib/auth/roles';
 import { redirect } from 'next/navigation';
 import LoginForm from './login-form';
 
@@ -7,7 +8,8 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  if (await getSession()) redirect('/classes');
+  const existing = await getSession();
+  if (existing) redirect(landingPath(existing.role));
   const { error } = await searchParams;
 
   return (
@@ -15,7 +17,8 @@ export default async function LoginPage({
       <div className="w-full max-w-sm">
         <h1 className="text-2xl font-semibold">ilmTrack Admin</h1>
         <p className="mt-1 mb-6 text-sm text-muted">
-          Sign in with your ilmTrack account.
+          Sign in with your ilmTrack account. Teachers see reports for their own
+          classes.
         </p>
         {error === 'forbidden' && (
           <p className="mb-4 rounded-md bg-warn-bg p-3 text-sm text-warn-fg">

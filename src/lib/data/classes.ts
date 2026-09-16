@@ -11,17 +11,93 @@ import type { Session } from '@/lib/auth/session';
  */
 
 /**
- * The one place class visibility is decided. A future organization-owner role
- * would compare the class owner against that role's org here, and both the
- * list and the detail page would narrow automatically.
+ * The one place class visibility is decided.
+ *
+ * Reads the class document itself rather than any denormalized array, so it
+ * stays correct even when users/{uid}.adminClassIds has drifted — which does
+ * happen; see the "accepted but no userId" case the detail page flags.
  */
-function canSeeClass(session: Session, _cls: Pick<Class, 'teacherId'>): boolean {
+function canSeeClass(session: Session, cls: Pick<Class, 'teacherId' | 'admins'>): boolean {
   switch (session.role) {
     case 'super-admin':
       return true;
+    case 'teacher':
+      // Owner, or a co-teacher who has actually accepted. A pending invite
+      // grants nothing — it matches no data in the app either.
+      return (
+        cls.teacherId === session.uid ||
+        (cls.admins || []).some(
+          (a) => a.userId === session.uid && a.inviteStatus === 'accepted'
+        )
+      );
     default:
       return false;
   }
+}
+
+/**
+ * Every class this caller may see, as raw documents. The scoped fetch behind
+ * both listClasses() and the header class picker.
+ *
+ * A super-admin scans the collection. A teacher never does: their own classes
+ * come from an indexed equality query, and their co-taught ones from the
+ * adminClassIds array on their user doc — a lookup hint only, since every
+ * candidate is still put through canSeeClass() above.
+ */
+export async function visibleClassDocs(session: Session): Promise<Class[]> {
+  const db = getAdminDb();
+
+  if (session.role === 'super-admin') {
+    const snap = await db.collection('classes').get();
+    return snap.docs.map((d) => ({ ...(d.data() as Class), id: d.id }));
+  }
+
+  const [ownedSnap, userSnap] = await Promise.all([
+    db.collection('classes').where('teacherId', '==', session.uid).get(),
+    db.collection('users').doc(session.uid).get(),
+  ]);
+
+  const byId = new Map<string, Class>();
+  for (const d of ownedSnap.docs) byId.set(d.id, { ...(d.data() as Class), id: d.id });
+
+  const coTaughtIds = ((userSnap.data() as User | undefined)?.adminClassIds || []).filter(
+    (id) => id && !byId.has(id)
+  );
+  if (coTaughtIds.length > 0) {
+    const refs = [...new Set(coTaughtIds)].map((id) => db.collection('classes').doc(id));
+    for (const snap of await db.getAll(...refs)) {
+      if (snap.exists) byId.set(snap.id, { ...(snap.data() as Class), id: snap.id });
+    }
+  }
+
+  return [...byId.values()].filter((cls) => canSeeClass(session, cls));
+}
+
+/**
+ * One class, if this caller may see it — the guard every class-scoped page and
+ * route handler starts with. Returns null rather than throwing so callers can
+ * answer with notFound(): a teacher probing another teacher's class id must
+ * not be able to tell "forbidden" apart from "does not exist".
+ */
+export async function getVisibleClass(session: Session, classId: string): Promise<Class | null> {
+  const snap = await getAdminDb().collection('classes').doc(classId).get();
+  if (!snap.exists) return null;
+
+  const cls = { ...(snap.data() as Class), id: snap.id };
+  return canSeeClass(session, cls) ? cls : null;
+}
+
+/** A class as it appears in the header picker. */
+export interface ClassOption {
+  id: string;
+  name: string;
+}
+
+export async function listVisibleClasses(session: Session): Promise<ClassOption[]> {
+  const classes = await visibleClassDocs(session);
+  return classes
+    .map((c) => ({ id: c.id, name: c.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export interface ClassRow {
@@ -57,10 +133,9 @@ async function loadUsers(uids: string[]): Promise<Map<string, User>> {
 }
 
 export async function listClasses(session: Session): Promise<ClassRow[]> {
-  const db = getAdminDb();
-  const snap = await db.collection('classes').get();
-  const classes = snap.docs.map((d) => ({ ...(d.data() as Class), id: d.id }));
-
+  // Already scoped, so the owner lookup below never fetches a user this
+  // caller has no business seeing.
+  const classes = await visibleClassDocs(session);
   const owners = await loadUsers(classes.map((c) => c.teacherId));
 
   const rows = classes.map((c) => ({
@@ -75,7 +150,7 @@ export async function listClasses(session: Session): Promise<ClassRow[]> {
   }));
 
   rows.sort((a, b) => a.name.localeCompare(b.name));
-  return rows.filter((row) => canSeeClass(session, row));
+  return rows;
 }
 
 export interface CoTeacherRow {
@@ -105,13 +180,10 @@ export async function getClassDetail(
   classId: string
 ): Promise<ClassDetail | null> {
   const db = getAdminDb();
-  const snap = await db.collection('classes').doc(classId).get();
-  if (!snap.exists) return null;
-
-  const data = { ...(snap.data() as Class), id: snap.id };
 
   // Same visibility rule as the list — a narrower role gets a 404 here.
-  if (!canSeeClass(session, data)) return null;
+  const data = await getVisibleClass(session, classId);
+  if (!data) return null;
 
   const admins = data.admins || [];
   const users = await loadUsers([

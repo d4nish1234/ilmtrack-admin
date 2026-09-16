@@ -1,14 +1,19 @@
 # ilmTrack Admin
 
-A small internal support console for [ilmTrack](../ilmTrack). Sign in as a
-platform admin to see every class — owner, co-teachers, students and their
-parents — and to link a registered teacher to any class as a co-teacher.
+A small internal support console for [ilmTrack](../ilmTrack), with two
+audiences:
 
-It exists because the mobile app gates "add co-teacher" on class ownership
-([`app/(teacher)/classes/[classId]/edit.tsx`](../ilmTrack/app/\(teacher\)/classes/\[classId\]/edit.tsx)),
-so there was no way to help a teacher who needed access to someone else's class.
+- **Platform admins** see every class — owner, co-teachers, students and their
+  parents — and can link a registered teacher to any class as a co-teacher.
+  This exists because the mobile app gates "add co-teacher" on class ownership
+  ([`app/(teacher)/classes/[classId]/edit.tsx`](../ilmTrack/app/\(teacher\)/classes/\[classId\]/edit.tsx)),
+  so there was no way to help a teacher who needed access to someone else's class.
+- **Teachers** sign in with their ordinary ilmTrack account and get
+  [reports](#reports) for their own classes — the same attendance, homework and
+  per-student figures the app shows, on a screen big enough to read them, and
+  downloadable as CSV.
 
-Read-only apart from that one action. Built to run locally.
+Read-only apart from the co-teacher link. Built to run locally.
 
 ## How it fits with the mobile app
 
@@ -60,35 +65,95 @@ Read-only apart from that one action. Built to run locally.
 
 ## Access control
 
-Two independent gates, both checked on every request:
+`resolveRole()` in [`src/lib/auth/session.ts`](src/lib/auth/session.ts) is the
+one gate. The sign-in route calls it to decide whether to mint a cookie, and
+every later request calls it again through `getSession()`, so the two can never
+drift apart. There are two ways in:
 
-| Gate | Where | Effect |
+| Role | Requires | Effect |
 | --- | --- | --- |
-| Email in `ADMIN_EMAILS` | `src/lib/auth/session.ts` | Removing an email locks that person out immediately |
-| A known `role` custom claim | Firebase Auth token | Set by `npm run grant`; takes effect at next sign-in |
+| `super-admin` | Email in `ADMIN_EMAILS` **and** a `role` custom claim from `npm run grant` | Both checked on every request: removing an email locks that person out immediately, and the claim takes effect at next sign-in |
+| `teacher` | A **verified** email **and** `users/{uid}.role == 'teacher'` in Firestore | No per-teacher setup. Access appears and disappears with their ilmTrack account |
+
+The teacher gate reads the token's `email_verified` claim rather than the user
+document's `emailVerified` field: the app only stamps that field on the first
+verified *login*, so a teacher who verified but has not reopened the app since
+would be wrongly turned away.
 
 Permissions live in one table, [`src/lib/auth/roles.ts`](src/lib/auth/roles.ts):
 
 ```ts
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  'super-admin': ['classes:read', 'classes:linkTeacher', 'teachers:read'],
+  'super-admin': ['classes:read', 'classes:linkTeacher', 'teachers:read', 'reports:read'],
+  'teacher':     ['reports:read'],
 };
 ```
 
 Every page calls `requirePermission(...)` and every route handler calls
 `requireApiPermission(...)`, and UI affordances render behind the same `can()`
-check — so a button and its endpoint can never disagree.
+check — so a button and its endpoint can never disagree. The shell layout is
+the one exception: it calls `requireSession()`, because any valid role may
+render a header, and the pages inside it still guard themselves.
+
+*Which* classes a role may see is a separate question, answered only by
+`canSeeClass()` in [`src/lib/data/classes.ts`](src/lib/data/classes.ts). A
+teacher sees a class if they own it, or if they are a co-teacher whose invite
+is `accepted`. That reads the class document rather than
+`users/{uid}.adminClassIds`, so a drifted array cannot grant access it
+shouldn't.
 
 **To add a role later** (say an organization owner who sees only their own
 org's classes):
 
 1. Add it to `ROLES` and give it a permission list in `roles.ts`.
-2. Widen `canSeeClass()` in [`src/lib/data/classes.ts`](src/lib/data/classes.ts)
-   — the single place class visibility is decided, used by both the list and
-   the detail page.
-3. Set the claim for those users.
+2. Add its branch to `canSeeClass()` — the single place class visibility is
+   decided, used by the class list, the detail page and every report.
+3. Give those users whatever `resolveRole()` looks for.
 
-No page or route changes shape.
+## Reports
+
+`/reports?classId=…&from=YYYY-MM-DD&to=YYYY-MM-DD` renders one of three
+reports — Attendance, Homework, or a per-student Class summary — and offers
+the same rows as a CSV download from
+`GET /api/reports/:classId/:kind`.
+
+The arithmetic in [`src/lib/reports/rows.ts`](src/lib/reports/rows.ts) is a
+hand-port of [`reportUtils.ts`](../ilmTrack/src/utils/reportUtils.ts), kept
+identical on purpose: a teacher comparing this console against the app's own
+report should see the same numbers. (It is hand-copied for the same reason
+`src/types/` is — the two apps use different Firebase SDKs, so their
+`Timestamp` classes are different types.) Note that attendance is filtered on
+`date` and homework on `createdAt`; that asymmetry comes from the app.
+
+**All state lives in the URL.** The header class picker writes only `classId`
+and copies every other parameter through; the date form writes only `from` and
+`to` and copies `classId`. So switching class cannot disturb the dates, and
+changing dates cannot disturb the class — structurally, not by convention.
+The page canonicalizes the URL on first visit so the dates are always spelled
+out rather than implied.
+
+The range defaults to the **last month**, and is capped at `MAX_RANGE_DAYS`.
+
+### Report indexes
+
+A Firestore query may combine any number of equality filters without a
+composite index, but adding a *range* filter needs one, and ilmTrack's
+`firestore.indexes.json` has nothing that fits `classId ==` plus a date range.
+So by default the range is narrowed **in memory**, which is what the mobile
+app's own report screen does. Correct, but it reads the class's whole history
+each time — the one-month default then saves transfer and rendering, not
+Firestore reads.
+
+Create these two indexes (Firebase Console → Firestore → Indexes; that is
+project configuration, so nothing in `../ilmTrack` changes):
+
+```
+attendance:  classId ASC, date ASC
+homework:    classId ASC, createdAt ASC
+```
+
+then set `REPORTS_DATE_INDEXES=true`. Results are identical either way; only
+the read volume differs, and there is a test asserting the two paths agree.
 
 ## What linking a teacher does
 
@@ -127,8 +192,9 @@ ilmTrack account yet, use the mobile app's pending-invite flow.
 
 ## Tests
 
-The mutation is covered against the Firestore emulator. It never touches
-production.
+Access control, class scoping and the report data layer are covered against
+the Firestore emulator; date-range parsing, CSV escaping and the summary
+arithmetic are pure and need no emulator. Nothing here touches production.
 
 ```bash
 # terminal 1

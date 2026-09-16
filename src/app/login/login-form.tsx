@@ -28,14 +28,17 @@ export default function LoginForm() {
       });
 
       if (!response.ok) {
-        // Not an admin — don't leave a half-signed-in client session behind.
+        // Not allowed in — don't leave a half-signed-in client session behind.
         await signOut(clientAuth);
         const { error: message } = await response.json();
         setError(message ?? 'Sign-in failed.');
         return;
       }
 
-      router.replace('/classes');
+      // The session cookie is httpOnly, so the server tells us where this
+      // account belongs: /classes for an admin, /reports for a teacher.
+      const { redirectTo } = await response.json();
+      router.replace(redirectTo ?? '/');
       router.refresh();
     } catch (err) {
       const code = (err as { code?: string }).code;
