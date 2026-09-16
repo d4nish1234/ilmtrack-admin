@@ -1,0 +1,25 @@
+# Netlify build configuration.
+#
+# Only *build-time* settings belong here. Variables the running app needs —
+# FIREBASE_SERVICE_ACCOUNT_JSON, ADMIN_EMAILS, TZ, and the NEXT_PUBLIC_* values —
+# must be set in the Netlify UI (Site configuration > Environment variables),
+# because values declared in this file do not reach serverless functions at
+# runtime.
+#
+# The Next.js runtime is installed automatically when Netlify detects Next.js;
+# it is deliberately not pinned here so Netlify can keep it current.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+  # Netlify scans build output for the values of environment variables and
+  # fails the build when it finds one. Next.js inlines every NEXT_PUBLIC_*
+  # value into the browser bundle by design, so these would trip it.
+  #
+  # Only these six are exempted: the service account is still scanned for, and
+  # that is the one secret that genuinely must never reach the client.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_FIREBASE_API_KEY,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,NEXT_PUBLIC_FIREBASE_PROJECT_ID,NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,NEXT_PUBLIC_FIREBASE_APP_ID"

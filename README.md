@@ -259,7 +259,65 @@ class appears with its students.
 
 ## Deploying
 
-Currently local-only. If you ever host it: the session cookie already sets
-`secure` in production, but you would need to supply the service account via a
-secret rather than a file on disk, and put the whole thing behind network
-restrictions — this app can read every user's data by design.
+Built to run locally, but it deploys as an ordinary Next.js app. Notes below
+are for Netlify; other hosts differ only in where you put the variables.
+
+**1. The service account cannot be a file.** `service-account/` is gitignored,
+so it is not in the deploy. Set the key's *contents* as
+`FIREBASE_SERVICE_ACCOUNT_JSON` instead and leave `FIREBASE_SERVICE_ACCOUNT_PATH`
+unset — [`loadServiceAccount()`](src/lib/firebase-admin.ts) prefers the
+variable and falls back to the path locally. Raw JSON or base64 both work; use
+base64 if the dashboard mangles the newlines inside `private_key`:
+
+```bash
+base64 -i ./service-account/your-key.json | pbcopy
+```
+
+**2. Which variables are secret.**
+
+| Variable | Secret | Why |
+| --- | --- | --- |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | **Yes** | The only real credential. Full admin access, bypasses every security rule |
+| `NEXT_PUBLIC_FIREBASE_*` (six) | No | Next.js inlines these into the browser bundle — public by design. A Firebase *web* API key is a project identifier, not a secret |
+| `ADMIN_EMAILS` | Optional | Server-only but not a credential. Marking it secret costs you the ability to read it back when editing |
+| `FIREBASE_USE_EMULATOR`, `*_EMULATOR_HOST` | — | Leave unset in production |
+
+Netlify scans build output for environment variable values and fails the build
+on a match, which the `NEXT_PUBLIC_*` values legitimately trigger.
+[`netlify.toml`](netlify.toml) exempts exactly those six via
+`SECRETS_SCAN_OMIT_KEYS` — don't disable scanning wholesale, or the service
+account stops being guarded too.
+
+**3. Set `TZ`.** Report ranges are whole days in the *server's* timezone
+([`range.ts`](src/lib/reports/range.ts)). A hosted server usually runs in UTC,
+where the day boundary lands mid-evening locally and reports drift a day out
+of step with the mobile app, which uses device-local time. Set `TZ` to the
+school's zone. It must go in the Netlify UI, not `netlify.toml`: variables
+declared in that file are build-time only and never reach the functions.
+
+**4. `npm run grant` still only runs locally.** Adding an email to
+`ADMIN_EMAILS` in the hosting UI is not enough — the role is a Firebase Auth
+custom claim set by that script. Run it against production, then have the
+person sign out and back in. Teachers need none of this; they are recognized
+from their ilmTrack account.
+
+**5. Create the report indexes** for the project you deploy against, if you
+have not already — see [setup](#setup) step 5.
+
+### Before you expose it
+
+This app can read every user's data by design, and hosting moves it from
+localhost to the public internet. `resolveRole()` is the only thing standing
+in front of it. Worth considering:
+
+- Password protection or IP restrictions at the host, as a second layer.
+- The service account key now lives in a third-party system. If you ever
+  suspect exposure, rotate it in the Firebase console — the old key keeps
+  working until you do.
+- Large CSV exports are served by a serverless function, which caps response
+  bodies (around 6 MB on Netlify). A year-long export for a large class can
+  approach that, and fails as an opaque function error rather than a clear one.
+
+Already handled: the session cookie sets `secure` under `NODE_ENV=production`,
+every page is `force-dynamic`, and the CSV route sends
+`Cache-Control: private, no-store` — so no student data is cached at the CDN.
