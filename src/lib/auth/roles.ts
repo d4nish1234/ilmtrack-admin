@@ -22,10 +22,17 @@ export type Permission =
   | 'classes:read'
   | 'classes:linkTeacher'
   | 'teachers:read'
-  | 'reports:read';
+  | 'reports:read'
+  | 'students:transfer';
 
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  'super-admin': ['classes:read', 'classes:linkTeacher', 'teachers:read', 'reports:read'],
+  'super-admin': [
+    'classes:read',
+    'classes:linkTeacher',
+    'teachers:read',
+    'reports:read',
+    'students:transfer',
+  ],
   // Reports only. A teacher has no 'classes:read', so the cross-teacher class
   // list and detail pages stay closed to them; which classes they may report
   // on is a separate question, answered by canSeeClass() in data/classes.ts.

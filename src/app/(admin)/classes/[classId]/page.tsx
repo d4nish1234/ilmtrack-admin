@@ -2,9 +2,10 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePermission } from '@/lib/auth/session';
 import { can } from '@/lib/auth/roles';
-import { getClassDetail } from '@/lib/data/classes';
+import { getClassDetail, listVisibleClasses } from '@/lib/data/classes';
 import { listTeachers } from '@/lib/data/teachers';
 import LinkTeacherForm from './link-teacher-form';
+import StudentActions from './student-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,12 @@ export default async function ClassDetailPage({
   if (!detail) notFound();
 
   const mayLink = can(session.role, 'classes:linkTeacher');
+  const mayTransfer = can(session.role, 'students:transfer');
+
+  // Every class this caller may see, minus this one — the transfer targets.
+  const transferTargets = mayTransfer
+    ? (await listVisibleClasses(session)).filter((c) => c.id !== detail.id)
+    : [];
 
   // Only load the picker list if the button will actually render.
   const linkedUids = new Set(
@@ -107,6 +114,9 @@ export default async function ClassDetailPage({
               <tr>
                 <th className="pb-2 font-medium">Student</th>
                 <th className="pb-2 font-medium">Parents</th>
+                <th className="pb-2 font-medium">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-subtle">
@@ -124,6 +134,15 @@ export default async function ClassDetailPage({
                           <span className="text-xs text-faint">({p.inviteStatus})</span>
                         </div>
                       ))
+                    )}
+                  </td>
+                  <td className="w-10 py-2 align-top">
+                    {mayTransfer && transferTargets.length > 0 && (
+                      <StudentActions
+                        studentId={s.id}
+                        studentName={s.name}
+                        classes={transferTargets}
+                      />
                     )}
                   </td>
                 </tr>

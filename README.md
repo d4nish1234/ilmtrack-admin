@@ -222,6 +222,55 @@ The `adminInvites` doc is created already `accepted`, which fires the email
 Only registered teachers can be linked here. To invite someone who has no
 ilmTrack account yet, use the mobile app's pending-invite flow.
 
+## Transferring a student
+
+`POST /api/students/:studentId/transfer` →
+[`src/lib/actions/transfer-student.ts`](src/lib/actions/transfer-student.ts).
+Super-admin only, and both classes must pass `canSeeClass()`.
+
+The student's entire homework and attendance history moves with them: every
+record is re-pointed at the new class, so the receiving teacher sees the full
+file. **The class they leave loses them from past reports** — a report for last
+term will no longer match what it showed before the transfer. That is the
+school's decision; snapshot the old class's CSV first if you need the old
+figures to survive.
+
+There is no equivalent in the mobile app to mirror.
+`linkExistingStudentToClass()` *copies* the student into a second document
+with a new id, which leaves history behind and orphans pending parent invites.
+Moving keeps `studentId` stable, so parent links and `invites` need no
+fixing — `onInviteAccepted` backfills by `studentId` alone.
+
+**Safe to run twice.** Every write sets an absolute value rather than mutating
+relative to what is there, and the history moves *before* the student doc
+does — so an interrupted run is completed simply by running it again. (The
+reverse order would strand half the history behind an "already in that class"
+check.) `studentCount` is the one thing repetition cannot make safe, so the
+student move and both counts happen in a single transaction, with the counts
+derived from a real count rather than incremented — which also repairs any
+existing drift.
+
+Nothing is stamped on the documents themselves: the whole transfer, including
+when it happened, lives in `adminAuditLog`, keeping the documents
+byte-identical to what the app's Cloud Functions expect.
+
+### The duplicate guard
+
+The app's copy feature means the same child can already exist as two student
+documents. Transferring one would leave the other behind, so the endpoint
+checks first and answers `409` with structured `blockers` and `warnings`:
+
+| | Condition | Behaviour |
+| --- | --- | --- |
+| **Blocker** | Same name **and** a shared parent email already in the target class | Refused. `acknowledge` cannot override it |
+| **Warning** | The same child appears to have a record in another class | Needs `acknowledge: true` |
+| **Warning** | Same name in the target class but no parent in common | Needs `acknowledge: true` |
+
+Note what is *not* a signal: a shared parent email on its own means
+**siblings**, which is ordinary — most families have more than one child
+enrolled. Only a shared parent *together with* the same name suggests one
+child recorded twice. Acknowledged warnings are recorded in the audit entry.
+
 ## Tests
 
 Access control, class scoping and the report data layer are covered against

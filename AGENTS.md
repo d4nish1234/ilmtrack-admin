@@ -52,6 +52,15 @@ Read `README.md` first; read `../ilmTrack/CLAUDE.md` for the Firestore data mode
   equality filters alone do not. Those indexes serve only this console — the
   app's rules force an identity filter into every list query, so it can never
   issue these.
+- **Mutations must be safe to re-run.** Both write actions in
+  `src/lib/actions/` are designed so an interrupted run is fixed by running it
+  again: writes set absolute values, never relative ones, and
+  `transfer-student.ts` moves history *before* the student doc for that
+  reason. Counters are the exception — they go in a transaction and are
+  derived from a real count.
+- **Shared parent email means siblings, not duplicates.** Most families have
+  several children enrolled. Only the same name *and* a shared parent
+  indicates one child recorded twice; see the guard in `transfer-student.ts`.
 - **Tests need the Firestore emulator**: `cd ../ilmTrack && firebase
   emulators:start --only firestore`, then `npm test`. They never touch production.
 - **Scripts run through `tsx` as CommonJS** (no `"type": "module"`), so no
