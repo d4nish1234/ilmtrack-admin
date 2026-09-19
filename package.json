@@ -2,9 +2,6 @@
   "name": "ilmtrack-admin",
   "version": "0.1.0",
   "private": true,
-  "engines": {
-    "node": ">=22.12"
-  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -35,5 +32,9 @@
     "tsx": "^4.23.13",
     "typescript": "^5",
     "vitest": "^5.0.0"
+  },
+  "_overrides_comment": "jwks-rsa (via firebase-admin) is CommonJS but declares jose ^6, which is ESM-only with no CJS build, so require('jose') throws ERR_REQUIRE_ESM on any runtime without require(esm). jose 5 ships a CJS build and exposes the four APIs jwks-rsa uses (decodeJwt, decodeProtectedHeader, exportSPKI, importJWK). Remove once jwks-rsa ships an ESM-safe release.",
+  "overrides": {
+    "jose": "^5.10.0"
   }
 }

@@ -17,15 +17,10 @@
   # static site instead of wiring up the server functions.
 
 [build.environment]
-  # Must be >= 22.12, and 24 is Netlify's own default — an earlier NODE_VERSION
-  # here actively downgrades the runtime off it.
-  #
-  # firebase-admin/auth reaches jose@6 through jwks-rsa, and jose@6 is pure ESM
-  # ("type": "module", no CJS build) while jwks-rsa does a plain require('jose').
-  # Node only permits require() of an ES module from 22.12 onward; before that
-  # every request dies with ERR_REQUIRE_ESM. Nothing can be bundled around it —
-  # firebase-admin is in Next.js's default serverExternalPackages list, so it is
-  # loaded by native require at runtime by design.
+  # Matches Netlify's own default and the version used locally. This is not
+  # what fixes the firebase-admin load — see the `jose` override in
+  # package.json for that; Netlify does not reliably let a Next.js site choose
+  # its *function* runtime version, so nothing here can be depended on to.
   NODE_VERSION = "24"
 
   # Netlify scans build output for the values of environment variables and
