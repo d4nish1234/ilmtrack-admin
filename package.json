@@ -10,7 +10,8 @@
     "grant": "tsx scripts/grant-admin.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "min-version": "tsx scripts/set-min-app-version.ts"
   },
   "dependencies": {
     "firebase": "^12.19.0",
