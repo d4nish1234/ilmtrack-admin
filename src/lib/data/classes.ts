@@ -160,6 +160,8 @@ export interface CoTeacherRow {
   inviteStatus: string;
   /** True when the entry says "accepted" but carries no uid — a broken link. */
   inconsistent: boolean;
+  /** userId set, but no users/{uid} document behind it. */
+  orphanedUid: boolean;
 }
 
 export interface ClassDetail {
@@ -228,6 +230,11 @@ export async function getClassDetail(
       name: displayName(a.userId ? users.get(a.userId) : undefined, '—'),
       inviteStatus: a.inviteStatus,
       inconsistent: a.inviteStatus === 'accepted' && !a.userId,
+      // Names a uid that has no users document. Almost always an account that
+      // was deleted and signed up again: the new account gets a new uid while
+      // this entry keeps naming the dead one, so the teacher silently sees
+      // nothing. Unlink and re-link to repair. See todo.md #7 in ../ilmTrack.
+      orphanedUid: Boolean(a.userId) && !users.has(a.userId!),
     })),
     students,
   };

@@ -6,6 +6,7 @@ import { getClassDetail, listVisibleClasses } from '@/lib/data/classes';
 import { listTeachers } from '@/lib/data/teachers';
 import LinkTeacherForm from './link-teacher-form';
 import StudentActions from './student-actions';
+import CoTeacherActions from './co-teacher-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +22,7 @@ export default async function ClassDetailPage({
   if (!detail) notFound();
 
   const mayLink = can(session.role, 'classes:linkTeacher');
+  const mayUnlink = can(session.role, 'classes:unlinkTeacher');
   const mayTransfer = can(session.role, 'students:transfer');
 
   // Every class this caller may see, minus this one — the transfer targets.
@@ -66,6 +68,7 @@ export default async function ClassDetailPage({
                 <th className="pb-2 font-medium">Name</th>
                 <th className="pb-2 font-medium">Email</th>
                 <th className="pb-2 font-medium">Status</th>
+                {mayUnlink && <th className="pb-2 font-medium sr-only">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-subtle">
@@ -91,7 +94,24 @@ export default async function ClassDetailPage({
                         no userId
                       </span>
                     )}
+                    {c.orphanedUid && (
+                      <span
+                        className="ml-2 rounded bg-danger-bg px-1.5 py-0.5 text-xs text-danger-fg"
+                        title="Points at a deleted account — almost always someone who signed up again and got a new uid. They see nothing. Unlink, then link them again to repair."
+                      >
+                        deleted account
+                      </span>
+                    )}
                   </td>
+                  {mayUnlink && (
+                    <td className="py-2 text-right">
+                      <CoTeacherActions
+                        classId={detail.id}
+                        teacherEmail={c.email}
+                        orphanedUid={c.orphanedUid}
+                      />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

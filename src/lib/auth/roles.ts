@@ -21,6 +21,7 @@ export type Role = (typeof ROLES)[number];
 export type Permission =
   | 'classes:read'
   | 'classes:linkTeacher'
+  | 'classes:unlinkTeacher'
   | 'teachers:read'
   | 'reports:read'
   | 'students:transfer';
@@ -29,6 +30,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   'super-admin': [
     'classes:read',
     'classes:linkTeacher',
+    'classes:unlinkTeacher',
     'teachers:read',
     'reports:read',
     'students:transfer',

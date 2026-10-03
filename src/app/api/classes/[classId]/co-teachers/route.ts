@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { ApiAuthError, requireApiPermission } from '@/lib/auth/session';
 import { LinkTeacherError, linkTeacherToClass } from '@/lib/actions/link-teacher';
+import { UnlinkTeacherError, unlinkTeacherFromClass } from '@/lib/actions/unlink-teacher';
 
 export async function POST(
   request: Request,
@@ -31,6 +32,41 @@ export async function POST(
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     console.error('link teacher failed:', error);
+    return NextResponse.json(
+      { error: 'Something went wrong. Check the server logs.' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ classId: string }> }
+) {
+  try {
+    const session = await requireApiPermission('classes:unlinkTeacher');
+    const { classId } = await params;
+    const { teacherEmail } = await request.json();
+
+    if (!teacherEmail || typeof teacherEmail !== 'string') {
+      return NextResponse.json({ error: 'Pick a co-teacher first.' }, { status: 400 });
+    }
+
+    const result = await unlinkTeacherFromClass(getAdminDb(), {
+      classId,
+      teacherEmail,
+      actor: { uid: session.uid, email: session.email },
+    });
+
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof UnlinkTeacherError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    console.error('unlink teacher failed:', error);
     return NextResponse.json(
       { error: 'Something went wrong. Check the server logs.' },
       { status: 500 }
