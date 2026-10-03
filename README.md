@@ -271,6 +271,22 @@ Note what is *not* a signal: a shared parent email on its own means
 enrolled. Only a shared parent *together with* the same name suggests one
 child recorded twice. Acknowledged warnings are recorded in the audit entry.
 
+## Maintenance scripts
+
+Both are re-runnable and take `--check` (report only, non-zero exit if work remains).
+
+| | |
+| --- | --- |
+| `npm run backfill:admin-ids` | Populates `classes/{id}.adminUserIds`, which `../ilmTrack/firestore.rules` reads to authorize co-teachers. Must be green before that ruleset deploys. |
+| `npm run repair:access` | Re-adds class members missing from `invitedTeacherIds` on students/homework/attendance. Additive only — it never revokes. |
+
+`repair:access` exists because the mobile app's `addAdmin` backfills only
+records whose `teacherId` is the class owner, while homework and attendance
+store the *creator* — so anything a co-teacher authored is skipped and later
+co-teachers can't see it. 243 records were repaired on 2026-09-26. Until the
+app-side fix ships (`../ilmTrack/todo.md` #6), run `--check` after adding a
+co-teacher.
+
 ## Tests
 
 Access control, class scoping and the report data layer are covered against

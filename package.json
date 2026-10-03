@@ -11,6 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "backfill:admin-ids": "tsx scripts/backfill-admin-user-ids.ts",
+    "repair:access": "tsx scripts/repair-access-arrays.ts",
     "min-version": "tsx scripts/set-min-app-version.ts"
   },
   "dependencies": {
