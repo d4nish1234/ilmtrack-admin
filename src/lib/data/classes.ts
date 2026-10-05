@@ -17,19 +17,41 @@ import type { Session } from '@/lib/auth/session';
  * stays correct even when users/{uid}.adminClassIds has drifted — which does
  * happen; see the "accepted but no userId" case the detail page flags.
  */
-function canSeeClass(session: Session, cls: Pick<Class, 'teacherId' | 'admins'>): boolean {
+/**
+ * Owner, or a co-teacher who has actually accepted. A pending invite grants
+ * nothing — it matches no data in the app either.
+ */
+function isClassTeacher(
+  session: Session,
+  cls: Pick<Class, 'teacherId' | 'admins'>
+): boolean {
+  return (
+    cls.teacherId === session.uid ||
+    (cls.admins || []).some((a) => a.userId === session.uid && a.inviteStatus === 'accepted')
+  );
+}
+
+function canSeeClass(
+  session: Session,
+  cls: Pick<Class, 'teacherId' | 'admins' | 'orgId'>
+): boolean {
   switch (session.role) {
     case 'super-admin':
       return true;
-    case 'teacher':
-      // Owner, or a co-teacher who has actually accepted. A pending invite
-      // grants nothing — it matches no data in the app either.
+    case 'org-admin':
+      // Their organizations' classes, plus anything they would see as a plain
+      // teacher. Becoming an org admin must not *remove* access to a class
+      // they personally own — roles here are a single value, so without this
+      // fallthrough the teacher branch would never run for them.
+      //
+      // Never a class with no orgId on the organization path: a standalone
+      // class belongs to nobody's org and must not become visible just
+      // because this caller administers one somewhere.
       return (
-        cls.teacherId === session.uid ||
-        (cls.admins || []).some(
-          (a) => a.userId === session.uid && a.inviteStatus === 'accepted'
-        )
+        (Boolean(cls.orgId) && session.orgIds.includes(cls.orgId!)) || isClassTeacher(session, cls)
       );
+    case 'teacher':
+      return isClassTeacher(session, cls);
     default:
       return false;
   }
@@ -44,6 +66,12 @@ function canSeeClass(session: Session, cls: Pick<Class, 'teacherId' | 'admins'>)
  * adminClassIds array on their user doc — a lookup hint only, since every
  * candidate is still put through canSeeClass() above.
  */
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 export async function visibleClassDocs(session: Session): Promise<Class[]> {
   const db = getAdminDb();
 
@@ -52,12 +80,25 @@ export async function visibleClassDocs(session: Session): Promise<Class[]> {
     return snap.docs.map((d) => ({ ...(d.data() as Class), id: d.id }));
   }
 
+  // An org admin's classes are found by orgId rather than by ownership, and
+  // they may also own or co-teach classes outside it, so both sets are
+  // gathered and canSeeClass() below decides. Chunked at 30, Firestore's `in`
+  // limit, which no one will reach but which costs nothing to respect.
+  const orgClassSnaps = await Promise.all(
+    chunk(session.orgIds, 30).map((ids) =>
+      db.collection('classes').where('orgId', 'in', ids).get()
+    )
+  );
+
   const [ownedSnap, userSnap] = await Promise.all([
     db.collection('classes').where('teacherId', '==', session.uid).get(),
     db.collection('users').doc(session.uid).get(),
   ]);
 
   const byId = new Map<string, Class>();
+  for (const snap of orgClassSnaps) {
+    for (const d of snap.docs) byId.set(d.id, { ...(d.data() as Class), id: d.id });
+  }
   for (const d of ownedSnap.docs) byId.set(d.id, { ...(d.data() as Class), id: d.id });
 
   const coTaughtIds = ((userSnap.data() as User | undefined)?.adminClassIds || []).filter(

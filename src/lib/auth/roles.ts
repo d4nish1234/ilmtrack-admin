@@ -6,6 +6,9 @@
  *
  *   super-admin — email in ADMIN_EMAILS *and* a `{ role: 'super-admin' }`
  *                 custom claim set by `npm run grant`.
+ *   org-admin   — a verified account listed in organizations/{id}.members.
+ *                 Granted in Firestore rather than a claim so revocation is
+ *                 immediate; see the note on Organization in src/types.
  *   teacher     — a verified ilmTrack account whose users/{uid} doc says
  *                 role: 'teacher'. No per-person setup; any teacher can
  *                 sign in, and sees only their own classes.
@@ -15,13 +18,16 @@
  * route handler needs to change shape.
  */
 
-export const ROLES = ['super-admin', 'teacher'] as const;
+export const ROLES = ['super-admin', 'org-admin', 'teacher'] as const;
 export type Role = (typeof ROLES)[number];
 
 export type Permission =
   | 'classes:read'
   | 'classes:linkTeacher'
   | 'classes:unlinkTeacher'
+  | 'orgs:read'
+  | 'orgs:manage'
+  | 'users:read'
   | 'teachers:read'
   | 'reports:read'
   | 'students:transfer';
@@ -31,10 +37,23 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'classes:read',
     'classes:linkTeacher',
     'classes:unlinkTeacher',
+    'orgs:read',
+    'orgs:manage',
+    'users:read',
     'teachers:read',
     'reports:read',
     'students:transfer',
   ],
+  // Scoped to one organization: sees and reports on every class in it, and may
+  // move a student between two of them — never outside it. Which classes those
+  // are is answered by canSeeClass() in data/classes.ts; this table says only
+  // *what* a role may do, never *to which* class.
+  //
+  // 'orgs:read' without 'orgs:manage' is deliberate — an org admin sees who
+  // administers their organization but cannot change it, so the role cannot
+  // widen its own reach.
+  'org-admin': ['classes:read', 'teachers:read', 'reports:read', 'students:transfer', 'orgs:read'],
+
   // Reports only. A teacher has no 'classes:read', so the cross-teacher class
   // list and detail pages stay closed to them; which classes they may report
   // on is a separate question, answered by canSeeClass() in data/classes.ts.

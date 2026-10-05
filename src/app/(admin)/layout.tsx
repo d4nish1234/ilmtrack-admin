@@ -30,6 +30,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                   Classes
                 </Link>
               )}
+              {can(session.role, 'users:read') && (
+                <Link href="/users" className="text-muted hover:underline">
+                  People
+                </Link>
+              )}
+              {can(session.role, 'orgs:read') && (
+                <Link href="/organizations" className="text-muted hover:underline">
+                  Organizations
+                </Link>
+              )}
               {can(session.role, 'reports:read') && (
                 <Link href="/reports" className="text-muted hover:underline">
                   Reports

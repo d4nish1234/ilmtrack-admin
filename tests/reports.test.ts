@@ -30,11 +30,11 @@ type Mod = {
 let mod: Mod;
 let db: import('firebase-admin/firestore').Firestore;
 
-const OWNER = { uid: 'owner-uid', email: 'owner@example.com', role: 'teacher' as const };
-const CO_TEACHER = { uid: 'co-uid', email: 'co@example.com', role: 'teacher' as const };
-const PENDING = { uid: 'pending-uid', email: 'pending@example.com', role: 'teacher' as const };
-const OUTSIDER = { uid: 'outsider-uid', email: 'outsider@example.com', role: 'teacher' as const };
-const ADMIN = { uid: 'admin-uid', email: 'admin@example.com', role: 'super-admin' as const };
+const OWNER = { uid: 'owner-uid', email: 'owner@example.com', role: 'teacher' as const, orgIds: []  };
+const CO_TEACHER = { uid: 'co-uid', email: 'co@example.com', role: 'teacher' as const, orgIds: []  };
+const PENDING = { uid: 'pending-uid', email: 'pending@example.com', role: 'teacher' as const, orgIds: []  };
+const OUTSIDER = { uid: 'outsider-uid', email: 'outsider@example.com', role: 'teacher' as const, orgIds: []  };
+const ADMIN = { uid: 'admin-uid', email: 'admin@example.com', role: 'super-admin' as const, orgIds: []  };
 
 const OURS = 'class-ours';
 const THEIRS = 'class-theirs';

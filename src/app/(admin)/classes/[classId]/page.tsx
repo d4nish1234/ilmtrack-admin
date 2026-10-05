@@ -4,6 +4,7 @@ import { requirePermission } from '@/lib/auth/session';
 import { can } from '@/lib/auth/roles';
 import { getClassDetail, listVisibleClasses } from '@/lib/data/classes';
 import { listTeachers } from '@/lib/data/teachers';
+import { features } from '@/lib/data/app-config';
 import LinkTeacherForm from './link-teacher-form';
 import StudentActions from './student-actions';
 import CoTeacherActions from './co-teacher-actions';
@@ -23,7 +24,12 @@ export default async function ClassDetailPage({
 
   const mayLink = can(session.role, 'classes:linkTeacher');
   const mayUnlink = can(session.role, 'classes:unlinkTeacher');
-  const mayTransfer = can(session.role, 'students:transfer');
+  // Permission says *whether the role may*; the flag says *whether it is
+  // switched on yet*. Super-admins are never gated — the flag exists to roll
+  // the feature out to org admins, not to disable support tooling.
+  const mayTransfer =
+    can(session.role, 'students:transfer') &&
+    (session.role !== 'org-admin' || (await features()).orgAdminTransfer);
 
   // Every class this caller may see, minus this one — the transfer targets.
   const transferTargets = mayTransfer

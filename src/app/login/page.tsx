@@ -2,6 +2,7 @@ import { getSession } from '@/lib/auth/session';
 import { landingPath } from '@/lib/auth/roles';
 import { redirect } from 'next/navigation';
 import LoginForm from './login-form';
+import GoogleSignIn from './google-sign-in';
 
 export default async function LoginPage({
   searchParams,
@@ -26,6 +27,14 @@ export default async function LoginPage({
           </p>
         )}
         <LoginForm />
+
+        <div className="my-4 flex items-center gap-3 text-xs text-muted">
+          <span className="h-px flex-1 bg-subtle" />
+          or
+          <span className="h-px flex-1 bg-subtle" />
+        </div>
+
+        <GoogleSignIn />
       </div>
     </main>
   );

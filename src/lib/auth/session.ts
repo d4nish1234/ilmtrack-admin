@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import type { DecodedIdToken } from 'firebase-admin/auth';
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 import type { User } from '@/types';
+import { orgIdsForUser } from '@/lib/data/organizations';
 import { can, isRole, type Permission, type Role } from './roles';
 
 export const SESSION_COOKIE = 'ilmtrack_admin_session';
@@ -16,6 +17,12 @@ export interface Session {
   uid: string;
   email: string;
   role: Role;
+  /**
+   * The organizations this caller administers. Empty for every other role.
+   * Carried on the session because it is resolved per request anyway, and
+   * because canSeeClass() needs it without a second round trip.
+   */
+  orgIds: string[];
 }
 
 /** Emails permitted to use this portal as a super-admin, from ADMIN_EMAILS. */
@@ -32,7 +39,7 @@ export function isAllowlistedEmail(email: string | undefined): boolean {
 }
 
 export type RoleResolution =
-  | { ok: true; role: Role }
+  | { ok: true; role: Role; orgIds?: string[] }
   | { ok: false; message: string };
 
 /**
@@ -40,11 +47,18 @@ export type RoleResolution =
  * cookie-minting route (POST /api/session) and by every subsequent request
  * via getSession(), so the two can never drift apart.
  *
- * Two independent ways in:
+ * Three independent ways in:
  *
  *   A. super-admin — the email is in ADMIN_EMAILS *and* the account carries a
  *      known `role` custom claim. Both are checked on every request, so
  *      removing someone from the env file locks them out immediately.
+ *
+ *   C. org-admin — the email is verified *and* the account is listed in an
+ *      organizations/{id}.members array. Checked before B, because an org
+ *      admin is usually also a teacher and the broader role is the useful one.
+ *      Granted in Firestore, not a custom claim, so that removing someone
+ *      takes effect on their very next request rather than on their next
+ *      token refresh — see the note on Organization in src/types.
  *
  *   B. teacher — the token says the email is verified *and* users/{uid} in
  *      Firestore says role: 'teacher'. The user doc is the authority here:
@@ -86,6 +100,13 @@ export async function resolveRole(claims: DecodedIdToken): Promise<RoleResolutio
   const snap = await getAdminDb().collection('users').doc(claims.uid).get();
   const user = snap.data() as User | undefined;
 
+  // Gate C — organization admin. Checked before 'teacher' because an org admin
+  // is usually also a teacher, and the broader role is the one they want. Read
+  // from the organization document, never from anything this account can
+  // write, so it cannot be self-granted.
+  const orgIds = await orgIdsForUser(claims.uid);
+  if (orgIds.length > 0) return { ok: true, role: 'org-admin', orgIds };
+
   if (user?.role === 'teacher') return { ok: true, role: 'teacher' };
   if (allowlisted) return needsGrant;
 
@@ -117,7 +138,12 @@ export const getSession = cache(async function getSession(): Promise<Session | n
     const claims = await getAdminAuth().verifySessionCookie(cookie, true);
     const resolved = await resolveRole(claims);
     if (!resolved.ok) return null;
-    return { uid: claims.uid, email: claims.email!, role: resolved.role };
+    return {
+      uid: claims.uid,
+      email: claims.email!,
+      role: resolved.role,
+      orgIds: resolved.orgIds ?? [],
+    };
   } catch {
     // Expired, revoked, or malformed cookie.
     return null;

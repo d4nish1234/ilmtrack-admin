@@ -35,12 +35,41 @@ export interface Admin {
   acceptedAt?: Timestamp;
 }
 
+/**
+ * A school or group that owns classes. Introduced so a class owner can grant
+ * administrative rights over several classes at once.
+ *
+ * Membership lives here and NOT in custom claims: claims cap at ~1000 bytes
+ * and refresh only with the token (roughly hourly), so revoking an admin who
+ * can move students would lag by up to an hour. Delayed grants are an
+ * annoyance; delayed revocation is a hole.
+ */
+export type OrgRole = 'owner' | 'admin';
+
+export interface OrgMember {
+  userId: string;
+  email: string;
+  role: OrgRole;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  members: OrgMember[];
+  /** Derived from members, mirroring adminUserIds on a class. */
+  memberUserIds: string[];
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 export interface Class {
   id: string;
   name: string;
   description?: string;
   /** Owner uid. */
   teacherId: string;
+  /** The organization this class belongs to, if any. Standalone classes have none. */
+  orgId?: string;
   admins: Admin[];
   studentCount: number;
   createdAt: Timestamp;
