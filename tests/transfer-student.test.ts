@@ -307,4 +307,20 @@ describe('validation', () => {
   it('rejects a move to the class the student is already in', async () => {
     await expect(transfer({ toClassId: CLASS_A })).rejects.toThrow(/already in/);
   });
+
+  it('moves the enrolment with the student', async () => {
+    // Membership lives in `enrollments` now, so a transfer that updated only
+    // the student document would leave them on the old class's roster.
+    await seed();
+    await db.collection('enrollments').doc(`${STUDENT}_${CLASS_A}`).set({
+      studentId: STUDENT, classId: CLASS_A, active: true,
+    });
+
+    await transfer();
+
+    const gone = await db.collection('enrollments').doc(`${STUDENT}_${CLASS_A}`).get();
+    const made = await db.collection('enrollments').doc(`${STUDENT}_${CLASS_B}`).get();
+    expect(gone.exists).toBe(false);
+    expect(made.data()).toMatchObject({ studentId: STUDENT, classId: CLASS_B, active: true });
+  });
 });

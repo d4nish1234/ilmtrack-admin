@@ -280,6 +280,22 @@ export async function transferStudentToClass(
     const to = toStudents.size + 1;
 
     tx.update(studentRef, { ...placement, updatedAt: FieldValue.serverTimestamp() });
+
+    // Class membership lives in `enrollments` as well as on the student, so
+    // both move together or neither does. A transfer *moves* history, so the
+    // old enrolment is closed rather than kept — a student enrolled in two
+    // classes is a different act, done by enrolling them twice. Ids are
+    // derived from student and class, matching the migration script and the
+    // backfill trigger, so repeating this cannot create a second row.
+    tx.delete(db.collection('enrollments').doc(`${studentId}_${fromClassId}`));
+    tx.set(db.collection('enrollments').doc(`${studentId}_${toClassId}`), {
+      studentId,
+      classId: toClassId,
+      active: true,
+      joinedAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
     if (fromClassSnap.exists) {
       tx.update(fromClassRef, { studentCount: from, updatedAt: FieldValue.serverTimestamp() });
     }
