@@ -49,13 +49,17 @@ export default function GoogleSignIn() {
         await signOut(clientAuth);
         const { error: message } = await response.json();
         setError(message ?? 'Sign-in failed.');
+        setBusy(false);
         return;
       }
 
+      // busy stays on until the destination replaces this page — see the same
+      // spot in login-form.tsx.
       const { redirectTo } = await response.json();
       router.replace(redirectTo ?? '/');
       router.refresh();
     } catch (err) {
+      setBusy(false);
       const code = (err as { code?: string }).code;
       if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
         return; // They changed their mind; not an error worth showing.
@@ -67,8 +71,6 @@ export default function GoogleSignIn() {
             ? 'Google sign-in is not enabled for this Firebase project yet.'
             : 'Sign-in failed. Check your connection and try again.'
       );
-    } finally {
-      setBusy(false);
     }
   }
 

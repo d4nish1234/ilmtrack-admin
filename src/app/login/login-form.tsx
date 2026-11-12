@@ -32,15 +32,22 @@ export default function LoginForm() {
         await signOut(clientAuth);
         const { error: message } = await response.json();
         setError(message ?? 'Sign-in failed.');
+        setBusy(false);
         return;
       }
 
       // The session cookie is httpOnly, so the server tells us where this
       // account belongs: /classes for an admin, /reports for a teacher.
+      //
+      // busy is deliberately left on: router.replace() returns before the
+      // destination has rendered, and on a cold serverless function that takes
+      // seconds. Resetting here would show an idle, empty-looking form until the
+      // new page arrives. This component unmounts when it does.
       const { redirectTo } = await response.json();
       router.replace(redirectTo ?? '/');
       router.refresh();
     } catch (err) {
+      setBusy(false);
       const code = (err as { code?: string }).code;
       setError(
         code === 'auth/invalid-credential' ||
@@ -49,8 +56,6 @@ export default function LoginForm() {
           ? 'Incorrect email or password.'
           : 'Sign-in failed. Check your connection and try again.'
       );
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -59,6 +64,7 @@ export default function LoginForm() {
       <input
         type="email"
         required
+        disabled={busy}
         autoComplete="username"
         placeholder="Email"
         value={email}
@@ -68,6 +74,7 @@ export default function LoginForm() {
       <input
         type="password"
         required
+        disabled={busy}
         autoComplete="current-password"
         placeholder="Password"
         value={password}
