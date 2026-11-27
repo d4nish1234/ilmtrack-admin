@@ -18,10 +18,14 @@ Read-only apart from the co-teacher link. Built to run locally.
 ## How it fits with the mobile app
 
 - **Same Firebase project.** You sign in with your existing ilmTrack account.
-- **ilmTrack is untouched.** No changes to `firestore.rules`, the Cloud
-  Functions, or the app. All data access happens server-side through the
-  Firebase Admin SDK, which bypasses security rules — so authorization is this
-  app's own job, enforced by `requirePermission()` on every page and route.
+- **ilmTrack is the source of truth.** Every feature users rely on is built
+  in the app and its Cloud Functions. This console is a terminal onto that
+  for the super-admin: it reuses what ilmTrack does rather than building its
+  own behaviour, and it never changes the app's rules, functions or data
+  model. See `AGENTS.md` for the rule and its existing exceptions.
+- **Server-side access.** All data access happens through the Firebase Admin
+  SDK, which bypasses security rules, so authorization is this app's own job,
+  enforced by `requirePermission()` on every page and route.
 - **Linking mirrors the app's own flow** (`addAdmin` in
   [`src/services/class.service.ts`](../ilmTrack/src/services/class.service.ts)),
   so the app and its Cloud Functions see exactly the state they expect.
@@ -306,21 +310,31 @@ npm run typecheck
 npm run lint
 ```
 
-## Running against the emulator end to end
+## Running locally
 
-To exercise the whole flow including the Cloud Functions and the mobile app:
+Local Firebase is owned by `../ilmTrack`, since that repo owns the project:
+its rules, Cloud Functions and demo data. See "Running locally" in
+`../ilmTrack/CLAUDE.md`. This console just connects to it.
 
 ```bash
-cd ../ilmTrack && firebase emulators:start --only auth,firestore,functions
+# in ../ilmTrack
+npm run emulators     # terminal 1: Auth, Firestore, Functions (UI on :4000)
+npm run seed:demo     # load the demo school (first run, or to reset)
+
+# here
+npm run dev:local     # the console, pointed at those emulators
 ```
 
-Set `FIREBASE_USE_EMULATOR=true` and `NEXT_PUBLIC_FIREBASE_USE_EMULATOR=true`
-in `.env.local` here, and `EXPO_PUBLIC_USE_EMULATOR=true` in `../ilmTrack/.env`.
-No service account key is needed against the emulator.
+`dev:local` sets the emulator flags, the project id (`demo-ilmtrack`) and
+`ADMIN_EMAILS` on the command line, so `.env.local` stays pointed at
+production for `npm run dev`, and a production build never sees them.
 
-Create two teachers and a class with a student in the app, link the second
-teacher from this portal, then sign in as them in the app and confirm the
-class appears with its students.
+Sign in as `admin@example.com` (super-admin), `maryam.siddiqui@example.com`
+(org admin) or any seeded teacher. Every password is `demo1234`. The full cast
+prints when you seed.
+
+The console's tests use their own project (`ilmtrack-admin-test`), so they can
+run against this same emulator without touching the demo data.
 
 ## Deploying
 

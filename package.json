@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:local": "FIREBASE_USE_EMULATOR=true NEXT_PUBLIC_FIREBASE_USE_EMULATOR=true NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-ilmtrack ADMIN_EMAILS=admin@example.com next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

@@ -15,8 +15,27 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 Support console for the ilmTrack mobile app (`../ilmTrack`, Expo/React Native).
 Read `README.md` first; read `../ilmTrack/CLAUDE.md` for the Firestore data model.
 
-- **Never edit `../ilmTrack`.** This app is deliberately built so that
-  `firestore.rules`, the Cloud Functions, and the mobile app stay untouched.
+- **ilmTrack is the source of truth for every feature; this console is a
+  terminal onto it.** Everything users do (adding students, inviting
+  teachers, homework, attendance, timekeeping) is built in `../ilmTrack`:
+  its app, services and Cloud Functions. This console is for the
+  super-admin to look around and do things here and there, and it should do
+  them by reusing what ilmTrack already does, ideally its Cloud Functions.
+  - **Do not build new behaviour here.** No new Cloud Functions, triggers or
+    business rules for the console. If a feature needs new logic, it belongs
+    in ilmTrack first, and the console calls it.
+  - **Do not change ilmTrack's behaviour from here.** Its rules, functions,
+    app code and data model change only as ilmTrack work, decided on its own
+    terms.
+  - **Editing ilmTrack is fine** for dev tooling that changes none of that:
+    the local emulator setup, demo seed data, docs, and gitignored local env
+    files. That tooling lives in ilmTrack because it owns the Firebase
+    project (see "Running locally" in `../ilmTrack/CLAUDE.md`).
+  - **Existing exceptions.** Some console actions predate this rule and
+    re-implement app logic with the Admin SDK instead of calling ilmTrack:
+    `src/lib/actions/` (link/unlink teacher, transfer student, manage org).
+    Don't extend that pattern. Moving them onto ilmTrack functions is future
+    work, not something to do in passing.
 - **All data access is server-side** via `firebase-admin` (`src/lib/firebase-admin.ts`),
   which bypasses security rules. The browser never queries Firestore —
   `src/lib/firebase-client.ts` exports auth only, and deliberately no Firestore.
